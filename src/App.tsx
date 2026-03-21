@@ -12,6 +12,7 @@ import { GameUI } from './components/GameUI';
 import { Cabinet } from './components/Cabinet';
 import { Dolls } from './components/Dolls';
 import { Claw } from './components/Claw';
+import { sounds } from './utils/sounds';
 
 const DOLL_COLORS = ['#ff6b6b', '#4ecdc4', '#ffe66d', '#ff9f43', '#a29bfe', '#fab1a0'];
 
@@ -37,6 +38,7 @@ export default function App() {
 
   const handleMove = (dx: number, dz: number) => {
     if (isDropping) return;
+    sounds.move();
     setClawPos(prev => ({
       x: Math.max(-1.5, Math.min(1.5, prev.x + dx)),
       z: Math.max(-1.5, Math.min(1.5, prev.z + dz))
@@ -45,6 +47,7 @@ export default function App() {
 
   const handleDrop = () => {
     if (isDropping) return;
+    sounds.drop();
     setIsDropping(true);
     setTimeout(() => {
       setIsDropping(false);
@@ -55,6 +58,7 @@ export default function App() {
   // Keyboard Controls
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
+      sounds.init();
       if (isDropping) return;
       
       const step = 0.1;
@@ -124,6 +128,7 @@ export default function App() {
               isDropping={isDropping} 
               onCatch={() => {
                 setScore(s => s + 1);
+                sounds.win();
                 
                 // Fireworks effect
                 const duration = 3000;

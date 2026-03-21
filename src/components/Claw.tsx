@@ -1,7 +1,8 @@
 import React, { useRef, useEffect, useState } from 'react';
 import { useFrame } from '@react-three/fiber';
-import { useBox, useCompoundBody } from '@react-three/cannon';
+import { useBox } from '@react-three/cannon';
 import * as THREE from 'three';
+import { sounds } from '../utils/sounds';
 
 export function Claw({ position, isDropping, onCatch, onGrab, onRelease, onYChange, onPositionChange, dollPositions }: { 
   position: { x: number, z: number }, 
@@ -27,6 +28,10 @@ export function Claw({ position, isDropping, onCatch, onGrab, onRelease, onYChan
     startX: 0,
     startZ: 0
   });
+
+  // Swaying physics state
+  const swing = useRef({ pitch: 0, roll: 0, pitchVel: 0, rollVel: 0 });
+  const currentPos = useRef({ x: position.x, z: position.z });
 
   const [, api] = useBox(() => ({
     type: 'Kinematic',
@@ -81,6 +86,7 @@ export function Claw({ position, isDropping, onCatch, onGrab, onRelease, onYChan
 
           if (closestId !== null) {
             animationState.current.caughtId = closestId;
+            sounds.grab();
             onGrab(closestId);
           }
         }
@@ -119,12 +125,48 @@ export function Claw({ position, isDropping, onCatch, onGrab, onRelease, onYChan
       }
     }
 
-    api.position.set(xPos, yPos, zPos);
+    // Swaying Physics Calculation
+    const dt = Math.min(0.05, 1 / 60); // Use fixed dt for stability or useFrame delta, but fixed is safer
+    const dx = xPos - currentPos.current.x;
+    const dz = zPos - currentPos.current.z;
+    const velX = dx / dt;
+    const velZ = dz / dt;
+    currentPos.current.x = xPos;
+    currentPos.current.z = zPos;
+
+    const targetPitch = velZ * 0.15;
+    const targetRoll = -velX * 0.15;
+
+    const springK = 20;
+    const damping = 2.5;
+    const mass = animationState.current.caughtId !== null ? 2 : 1;
+
+    const pitchForce = (targetPitch - swing.current.pitch) * springK - swing.current.pitchVel * damping;
+    const rollForce = (targetRoll - swing.current.roll) * springK - swing.current.rollVel * damping;
+
+    swing.current.pitchVel += (pitchForce / mass) * dt;
+    swing.current.rollVel += (rollForce / mass) * dt;
+
+    swing.current.pitch += swing.current.pitchVel * dt;
+    swing.current.roll += swing.current.rollVel * dt;
+
+    if (groupRef.current) {
+      groupRef.current.rotation.x = swing.current.pitch;
+      groupRef.current.rotation.z = swing.current.roll;
+    }
+
+    const dropLen = Math.max(0.01, 8.15 - yPos);
+    const actualX = xPos + Math.sin(swing.current.roll) * dropLen;
+    const actualZ = zPos - Math.sin(swing.current.pitch) * dropLen;
+
+    api.position.set(actualX, yPos, actualZ);
     onYChange(yPos);
     if (isDropping) {
-      onPositionChange({ x: xPos, z: zPos });
+      onPositionChange({ x: actualX, z: actualZ });
     }
   });
+
+  const dropLen = Math.max(0.01, 8.15 - yPos);
 
   return (
     <>
@@ -153,45 +195,47 @@ export function Claw({ position, isDropping, onCatch, onGrab, onRelease, onYChan
         </mesh>
       </group>
 
-      <group ref={groupRef} position={[xPos, yPos, zPos]}>
-        {/* Cable */}
-        <mesh position={[0, (8.15 - yPos) / 2, 0]}>
-          <cylinderGeometry args={[0.02, 0.02, Math.max(0.01, 8.15 - yPos)]} />
-          <meshStandardMaterial color="#111" />
-        </mesh>
+      <group position={[xPos, 8.15, zPos]}>
+        <group ref={groupRef}>
+          {/* Cable */}
+          <mesh position={[0, -dropLen / 2, 0]}>
+            <cylinderGeometry args={[0.02, 0.02, dropLen]} />
+            <meshStandardMaterial color="#111" />
+          </mesh>
 
-      {/* Claw Hub */}
-      <mesh castShadow>
-        <cylinderGeometry args={[0.3, 0.4, 0.4, 12]} />
-        <meshStandardMaterial color="#94a3b8" metalness={0.8} roughness={0.2} />
-      </mesh>
+          {/* Claw Hub */}
+          <mesh position={[0, -dropLen, 0]} castShadow>
+            <cylinderGeometry args={[0.3, 0.4, 0.4, 12]} />
+            <meshStandardMaterial color="#94a3b8" metalness={0.8} roughness={0.2} />
+          </mesh>
 
-      {/* Decorative Hub Top */}
-      <mesh position={[0, 0.3, 0]}>
-        <sphereGeometry args={[0.2, 16, 16]} />
-        <meshStandardMaterial color="#ef4444" emissive="#ef4444" emissiveIntensity={0.5} />
-      </mesh>
+          {/* Decorative Hub Top */}
+          <mesh position={[0, -dropLen + 0.3, 0]}>
+            <sphereGeometry args={[0.2, 16, 16]} />
+            <meshStandardMaterial color="#ef4444" emissive="#ef4444" emissiveIntensity={0.5} />
+          </mesh>
 
-      {/* Claw Fingers */}
-      {[0, 120, 240].map((angle, i) => (
-        <group key={i} rotation={[0, (angle * Math.PI) / 180, 0]}>
-          <group 
-            position={[0.35, -0.1, 0]} 
-            rotation={[0, 0, clawOpen ? -1.2 : 0.1]} // More dramatic open
-          >
-            {/* Upper Finger - Slightly angled */}
-            <mesh castShadow position={[0, -0.3, 0]} rotation={[0, 0, 0.2]}>
-              <boxGeometry args={[0.08, 0.6, 0.12]} />
-              <meshStandardMaterial color="#cbd5e1" metalness={0.9} roughness={0.1} />
-            </mesh>
-            {/* Lower Finger / Tip - Curved Inward */}
-            <mesh castShadow position={[0.12, -0.7, 0]} rotation={[0, 0, 1.2]}>
-              <boxGeometry args={[0.08, 0.5, 0.12]} />
-              <meshStandardMaterial color="#cbd5e1" metalness={0.9} roughness={0.1} />
-            </mesh>
-          </group>
+          {/* Claw Fingers */}
+          {[0, 120, 240].map((angle, i) => (
+            <group key={i} position={[0, -dropLen, 0]} rotation={[0, (angle * Math.PI) / 180, 0]}>
+              <group 
+                position={[0.35, -0.1, 0]} 
+                rotation={[0, 0, clawOpen ? -1.2 : 0.1]} // More dramatic open
+              >
+                {/* Upper Finger - Slightly angled */}
+                <mesh castShadow position={[0, -0.3, 0]} rotation={[0, 0, 0.2]}>
+                  <boxGeometry args={[0.08, 0.6, 0.12]} />
+                  <meshStandardMaterial color="#cbd5e1" metalness={0.9} roughness={0.1} />
+                </mesh>
+                {/* Lower Finger / Tip - Curved Inward */}
+                <mesh castShadow position={[0.12, -0.7, 0]} rotation={[0, 0, 1.2]}>
+                  <boxGeometry args={[0.08, 0.5, 0.12]} />
+                  <meshStandardMaterial color="#cbd5e1" metalness={0.9} roughness={0.1} />
+                </mesh>
+              </group>
+            </group>
+          ))}
         </group>
-      ))}
       </group>
     </>
   );

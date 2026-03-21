@@ -84,6 +84,14 @@ export function Cabinet() {
         <mesh position={[2.5, 0, 0]}><boxGeometry args={[0.2, 0.2, 4.8]} /><meshStandardMaterial color="#be123c" /></mesh>
       </group>
 
+      {/* Cabinet Legs */}
+      {[-2.4, 2.4].map(x => [-2.4, 2.4].map(z => (
+        <mesh key={`leg-${x}-${z}`} position={[x, 1, z]} castShadow>
+          <boxGeometry args={[0.2, 2, 0.2]} />
+          <meshStandardMaterial color="#be123c" />
+        </mesh>
+      )))}
+
       {/* Prize Chute Hole Rim (Black) */}
       <group position={[-1.85, 2.11, 1.85]}>
         <mesh position={[0, 0, -0.7]}><boxGeometry args={[1.5, 0.02, 0.1]} /><meshStandardMaterial color="#000000" /></mesh>
