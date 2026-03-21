@@ -1,0 +1,5 @@
+{
+  "name": "抓娃娃机",
+  "description": "A realistic 3D claw machine game with physics-based doll grabbing.",
+  "requestFramePermissions": []
+}
